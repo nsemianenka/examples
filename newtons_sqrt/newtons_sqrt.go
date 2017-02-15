@@ -5,20 +5,37 @@ import (
 	"math"
 )
 
-func Sqrt(x float64) float64 {
-	znext, zprev, eps := 1., 2., 0.00001
-	for math.Abs(znext-zprev) > eps {
-		zprev = znext
-		znext = zprev - (zprev*zprev-x)/2/zprev
+type ErrNegativeSqrt float64
 
-		//fmt.Printf("znext: %T, %f, zprev: %T, %f, eps: %T, %f\n",
-		//		   	znext, znext, zprev, zprev, eps, eps)
+func (e ErrNegativeSqrt) Error() string {
+	return fmt.Sprintf("cannot Sqrt negative number: %f", e);
+}
+
+func Sqrt(x float64) (float64, error) {
+	var error *ErrNegativeSqrt
+	znext, zprev, eps := 1., 2., 0.00001
+	if x < 0 {
+		error = &ErrNegativeSqrt(x)
 	}
-	return znext
+	if error == nil {
+		for math.Abs(znext-zprev) > eps {
+			zprev = znext
+			znext = zprev - (zprev*zprev-x)/2/zprev
+
+			//fmt.Printf("znext: %T, %f, zprev: %T, %f, eps: %T, %f\n",
+			//		   	znext, znext, zprev, zprev, eps, eps)
+		}
+	}
+	return znext, error
 }
 
 func main() {
-	mySqrt, mathSqrt := Sqrt(2), math.Sqrt(2)
-	fmt.Printf("my: %F, math: %F, delta: %F\n", mySqrt, mathSqrt,
-		math.Abs(mySqrt-mathSqrt))
+	mySqrt, err := Sqrt(2)
+	mathSqrt := math.Sqrt(2)
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Printf("my: %F, math: %F, delta: %F\n", mySqrt, mathSqrt,
+			math.Abs(mySqrt-mathSqrt))
+	}
 }
