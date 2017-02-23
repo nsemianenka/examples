@@ -11,7 +11,7 @@ type Fetcher interface {
 	Fetch(url string) (body string, urls []string, err error)
 }
 
-type UrlsBodyMapping map[string]*string
+type UrlsBodyMapping map[string]string
 type Crawler struct {
 	m UrlsBodyMapping
 	mux sync.Mutex
@@ -19,21 +19,26 @@ type Crawler struct {
 
 func (c * Crawler) crawl (url string, depth int, fetcher Fetcher, ch chan string) {
 	if depth < 0 {
+		close(ch)
 		return
 	}
 	c.mux.Lock()
 	if _, ok := c.m[url]; ok {
 		c.mux.Unlock()
+		close(ch)
 		return
 	} else {
 		body, urls, err := fetcher.Fetch(url)
 
 		if err != nil {
 			c.mux.Unlock()
-			fmt.Println(err)
+			c.m[url] = err.Error()
+			ch <- err.Error()
+			//fmt.Println(err)
+			close(ch)
 			return
 		}
-		c.m[url] = &body
+		c.m[url] = body
 		c.mux.Unlock()
 		ch <- fmt.Sprintf("found: %s %q\n", url, body)
 		chans := make([]chan string, len(urls))
@@ -50,8 +55,9 @@ func (c * Crawler) crawl (url string, depth int, fetcher Fetcher, ch chan string
 				ch <- c
 			}
 		}
+		close(ch)
 	}
-	close(ch)
+
 }
 
 // Crawl uses fetcher to recursively crawl
@@ -59,23 +65,10 @@ func (c * Crawler) crawl (url string, depth int, fetcher Fetcher, ch chan string
 func Crawl(url string, depth int, fetcher Fetcher) {
 	// TODO: Fetch URLs in parallel.
 	// TODO: Don't fetch the same URL twice.
-	// This implementation doesn't do either:
-	//if depth <= 0 {
-	//	return
-	//}
-	//body, urls, err := fetcher.Fetch(url)
-	//if err != nil {
-	//	fmt.Println(err)
-	//	return
-	//}
-	//fmt.Printf("found: %s %q\n", url, body)
-	//for _, u := range urls {
-	//	Crawl(u, depth-1, fetcher)
-	//}
 
-	c := Crawler{m: make(map[string]*string)}
+	c := Crawler{m: make(map[string]string)}
 	ch := make(chan string)
-	c.crawl(url, depth, fetcher, ch)
+	go c.crawl(url, depth, fetcher, ch)
 	for res := range ch {
 		fmt.Print(res)
 	}
@@ -98,7 +91,7 @@ func (f fakeFetcher) Fetch(url string) (string, []string, error) {
 	if res, ok := f[url]; ok {
 		return res.body, res.urls, nil
 	}
-	return "", nil, fmt.Errorf("not found: %s", url)
+	return "", nil, fmt.Errorf("not found: %s\n", url)
 }
 
 // fetcher is a populated fakeFetcher.
